@@ -1,0 +1,44 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Tournament {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  startDate   DateTime
+  endDate     DateTime?
+  prefecture  String
+  city        String?
+  venue       String?
+  category    String   // 一般、学生、小学生等
+  level       String?  // 県大会、全国大会等
+  entryFee    Int?     // 参加費（円）
+  maxEntries  Int?     // 定員
+  deadline    DateTime? // 申込締切
+  contactInfo String?  // 問い合わせ先
+  sourceUrl   String   // 情報元URL
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([startDate])
+  @@index([prefecture])
+  @@index([category])
+}
+
+model ScrapingLog {
+  id        Int      @id @default(autoincrement())
+  source    String   // サイト名
+  url       String   // スクレイピング対象URL
+  status    String   // success, error
+  message   String?  // エラーメッセージ等
+  createdAt DateTime @default(now())
+}

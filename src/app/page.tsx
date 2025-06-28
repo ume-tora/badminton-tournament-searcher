@@ -1,103 +1,224 @@
-import Image from "next/image";
+'use client'
+
+import { useState, useEffect } from 'react'
+import TournamentCard from '@/components/ui/TournamentCard'
+import SearchFilters from '@/components/ui/SearchFilters'
+import Pagination from '@/components/ui/Pagination'
+import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import { MagnifyingGlassIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline'
+
+interface Tournament {
+  id: number
+  name: string
+  description?: string
+  startDate: string
+  endDate?: string
+  prefecture: string
+  city?: string
+  venue?: string
+  category: string
+  level?: string
+  entryFee?: number
+  maxEntries?: number
+  deadline?: string
+  contactInfo?: string
+  sourceUrl: string
+}
+
+interface SearchFilters {
+  prefecture: string
+  city: string
+  category: string
+  startDate: string
+  endDate: string
+  keyword: string
+}
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [tournaments, setTournaments] = useState<Tournament[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [filters, setFilters] = useState<SearchFilters>({
+    prefecture: '',
+    city: '',
+    category: '',
+    startDate: '',
+    endDate: '',
+    keyword: ''
+  })
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 12,
+    total: 0,
+    totalPages: 0
+  })
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  const searchTournaments = async (page = 1) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: pagination.limit.toString(),
+        ...Object.fromEntries(
+          Object.entries(filters).filter(([, value]) => value !== '')
+        )
+      })
+
+      const response = await fetch(`/api/tournaments?${params}`)
+      
+      if (!response.ok) {
+        throw new Error('検索中にエラーが発生しました')
+      }
+      
+      const data = await response.json()
+      
+      setTournaments(data.tournaments)
+      setPagination(data.pagination)
+    } catch (error) {
+      console.error('Search error:', error)
+      setError(error instanceof Error ? error.message : '検索中にエラーが発生しました')
+      setTournaments([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSearch = () => {
+    searchTournaments(1)
+  }
+
+  const handlePageChange = (newPage: number) => {
+    searchTournaments(newPage)
+  }
+
+  useEffect(() => {
+    searchTournaments()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+      {/* ヘッダー */}
+      <header className="bg-white shadow-sm border-b border-gray-200">
+        <div className="container mx-auto px-4 py-6 sm:py-8">
+          <div className="text-center">
+            <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-2">
+              🏸 バドミントン大会検索
+            </h1>
+            <p className="text-gray-600 text-sm sm:text-base">
+              全国のバドミントン大会情報を簡単に検索できます
+            </p>
+          </div>
         </div>
+      </header>
+
+      <main className="container mx-auto px-4 py-6 sm:py-8">
+        {/* 検索フィルター */}
+        <div className="mb-8">
+          <SearchFilters 
+            filters={filters}
+            onFiltersChange={setFilters}
+            onSearch={handleSearch}
+            loading={loading}
+          />
+        </div>
+
+        {/* エラー表示 */}
+        {error && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-center gap-3">
+              <ExclamationTriangleIcon className="w-5 h-5 text-red-500 flex-shrink-0" />
+              <div>
+                <h3 className="text-sm font-medium text-red-800">エラーが発生しました</h3>
+                <p className="text-sm text-red-700 mt-1">{error}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 検索結果ヘッダー */}
+        {!loading && !error && (
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+            <div className="flex items-center gap-2">
+              <MagnifyingGlassIcon className="w-5 h-5 text-gray-400" />
+              <span className="text-sm text-gray-600">
+                {pagination.total > 0 ? (
+                  <>
+                    <span className="font-semibold text-gray-900">{pagination.total}</span>
+                    件の大会が見つかりました
+                  </>
+                ) : (
+                  '検索結果: 0件'
+                )}
+              </span>
+            </div>
+            {pagination.total > 0 && (
+              <div className="text-sm text-gray-500">
+                {pagination.limit}件ずつ表示
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ローディング表示 */}
+        {loading && (
+          <div className="flex flex-col items-center justify-center py-16">
+            <LoadingSpinner size="lg" className="mb-4" />
+            <p className="text-gray-600">検索中...</p>
+          </div>
+        )}
+
+        {/* 検索結果 */}
+        {!loading && !error && tournaments.length > 0 && (
+          <div className="grid gap-6 sm:gap-8 mb-8">
+            {tournaments.map(tournament => (
+              <TournamentCard key={tournament.id} tournament={tournament} />
+            ))}
+          </div>
+        )}
+
+        {/* 検索結果なし */}
+        {!loading && !error && tournaments.length === 0 && (
+          <div className="text-center py-16">
+            <div className="mb-4">
+              <MagnifyingGlassIcon className="w-16 h-16 text-gray-300 mx-auto" />
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              検索条件に一致する大会が見つかりませんでした
+            </h3>
+            <p className="text-gray-600 mb-6">
+              検索条件を変更して再度お試しください
+            </p>
+            <button
+              onClick={() => {
+                setFilters({
+                  prefecture: '',
+                  city: '',
+                  category: '',
+                  startDate: '',
+                  endDate: '',
+                  keyword: ''
+                })
+                searchTournaments(1)
+              }}
+              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              すべての大会を表示
+            </button>
+          </div>
+        )}
+
+        {/* ページネーション */}
+        {!loading && !error && pagination.totalPages > 1 && (
+          <Pagination
+            currentPage={pagination.page}
+            totalPages={pagination.totalPages}
+            onPageChange={handlePageChange}
+            className="mt-8"
+          />
+        )}
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
     </div>
-  );
+  )
 }
