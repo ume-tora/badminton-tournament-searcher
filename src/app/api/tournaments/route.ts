@@ -1,19 +1,52 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { z } from 'zod'
+import { searchSchema, tournamentSchema, sanitizeHtml } from '@/lib/validation'
 
-const searchSchema = z.object({
-  prefecture: z.string().optional(),
-  city: z.string().optional(),
-  category: z.string().optional(),
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
-  keyword: z.string().optional(),
-  page: z.string().optional().transform(val => val ? parseInt(val) : 1),
-  limit: z.string().optional().transform(val => val ? parseInt(val) : 20)
-})
+// Rate limiting (简易版本)
+const rateLimit = new Map<string, { count: number; resetTime: number }>()
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now()
+  const limit = rateLimit.get(ip)
+  
+  if (!limit || now > limit.resetTime) {
+    rateLimit.set(ip, { count: 1, resetTime: now + 60000 }) // 1分間に60リクエスト
+    return true
+  }
+  
+  if (limit.count >= 60) {
+    return false
+  }
+  
+  limit.count++
+  return true
+}
+
+function getClientIP(request: NextRequest): string {
+  const forwarded = request.headers.get('x-forwarded-for')
+  const realIP = request.headers.get('x-real-ip')
+  
+  if (forwarded) {
+    return forwarded.split(',')[0].trim()
+  }
+  
+  if (realIP) {
+    return realIP
+  }
+  
+  return 'unknown'
+}
 
 export async function GET(request: NextRequest) {
+  const clientIP = getClientIP(request)
+  
+  if (!checkRateLimit(clientIP)) {
+    return NextResponse.json(
+      { error: 'レート制限に達しました。しばらく時間をおいてから再試行してください。' },
+      { status: 429 }
+    )
+  }
+
   try {
     const { searchParams } = new URL(request.url)
     const params = Object.fromEntries(searchParams.entries())
@@ -40,7 +73,7 @@ export async function GET(request: NextRequest) {
           entryFee: 5000,
           maxEntries: 256,
           deadline: new Date("2024-11-30"),
-          contactInfo: "日本バドミントン協会",
+          contactInfo: "日本バドミントン協会（デモデータ）",
           sourceUrl: "https://example.com/tournament1",
           createdAt: new Date(),
           updatedAt: new Date()
@@ -59,7 +92,7 @@ export async function GET(request: NextRequest) {
           entryFee: 3000,
           maxEntries: 128,
           deadline: new Date("2024-11-10"),
-          contactInfo: "関東学生バドミントン連盟",
+          contactInfo: "関東学生バドミントン連盟（デモデータ）",
           sourceUrl: "https://example.com/tournament2",
           createdAt: new Date(),
           updatedAt: new Date()
@@ -89,7 +122,9 @@ export async function GET(request: NextRequest) {
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const where: Record<string, any> = {}
+    const where: Record<string, any> = {
+      status: 'published' // Only show published tournaments
+    }
 
     if (prefecture) {
       where.prefecture = prefecture
@@ -148,40 +183,79 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Search error:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: '検索処理でエラーが発生しました' },
       { status: 500 }
     )
   }
 }
 
 export async function POST(request: NextRequest) {
+  const clientIP = getClientIP(request)
+  
+  if (!checkRateLimit(clientIP)) {
+    return NextResponse.json(
+      { error: 'レート制限に達しました。しばらく時間をおいてから再試行してください。' },
+      { status: 429 }
+    )
+  }
+
   try {
     const body = await request.json()
     
+    // Validate input data
+    const validated = tournamentSchema.parse(body)
+    
+    // Sanitize text inputs
+    const sanitizedData = {
+      ...validated,
+      name: sanitizeHtml(validated.name),
+      description: validated.description ? sanitizeHtml(validated.description) : undefined,
+      city: validated.city ? sanitizeHtml(validated.city) : undefined,
+      venue: validated.venue ? sanitizeHtml(validated.venue) : undefined,
+      level: validated.level ? sanitizeHtml(validated.level) : undefined,
+      contactInfo: validated.contactInfo ? sanitizeHtml(validated.contactInfo) : undefined,
+      startDate: new Date(validated.startDate),
+      endDate: validated.endDate ? new Date(validated.endDate) : undefined,
+      deadline: validated.deadline ? new Date(validated.deadline) : undefined
+    }
+
+    // For production demo, just return success without saving to database
+    if (process.env.NODE_ENV === 'production' && !process.env.DATABASE_URL) {
+      return NextResponse.json({ 
+        message: '大会情報が正常に登録されました（デモモード）',
+        id: Math.floor(Math.random() * 1000) + 1000
+      }, { status: 201 })
+    }
+
     const tournament = await prisma.tournament.create({
+      data: sanitizedData
+    })
+
+    // Log the action (audit trail)
+    await prisma.auditLog.create({
       data: {
-        name: body.name,
-        description: body.description,
-        startDate: new Date(body.startDate),
-        endDate: body.endDate ? new Date(body.endDate) : null,
-        prefecture: body.prefecture,
-        city: body.city,
-        venue: body.venue,
-        category: body.category,
-        level: body.level,
-        entryFee: body.entryFee,
-        maxEntries: body.maxEntries,
-        deadline: body.deadline ? new Date(body.deadline) : null,
-        contactInfo: body.contactInfo,
-        sourceUrl: body.sourceUrl
+        action: 'create',
+        entity: 'tournament',
+        entityId: tournament.id,
+        details: `Tournament "${tournament.name}" created`,
+        ipAddress: clientIP,
+        userAgent: request.headers.get('user-agent') || 'unknown'
       }
     })
 
     return NextResponse.json(tournament, { status: 201 })
   } catch (error) {
     console.error('Create tournament error:', error)
+    
+    if (error instanceof Error && error.name === 'ZodError') {
+      return NextResponse.json(
+        { error: '入力データが正しくありません', details: error.message },
+        { status: 400 }
+      )
+    }
+    
     return NextResponse.json(
-      { error: 'Failed to create tournament' },
+      { error: '大会登録でエラーが発生しました' },
       { status: 500 }
     )
   }

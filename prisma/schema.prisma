@@ -25,20 +25,39 @@ model Tournament {
   maxEntries  Int?     // 定員
   deadline    DateTime? // 申込締切
   contactInfo String?  // 問い合わせ先
-  sourceUrl   String   // 情報元URL
+  sourceUrl   String?  // 情報元URL（任意）
+  status      String   @default("published") // draft, published, archived
+  createdBy   Int?     // 作成者
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  user User? @relation(fields: [createdBy], references: [id])
 
   @@index([startDate])
   @@index([prefecture])
   @@index([category])
+  @@index([status])
 }
 
-model ScrapingLog {
+model User {
+  id          Int      @id @default(autoincrement())
+  email       String   @unique
+  name        String?
+  role        String   @default("user") // user, admin
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  tournaments Tournament[]
+}
+
+model AuditLog {
   id        Int      @id @default(autoincrement())
-  source    String   // サイト名
-  url       String   // スクレイピング対象URL
-  status    String   // success, error
-  message   String?  // エラーメッセージ等
+  action    String   // create, update, delete
+  entity    String   // tournament, user
+  entityId  Int?
+  userId    Int?
+  details   String?
+  ipAddress String?
+  userAgent String?
   createdAt DateTime @default(now())
 }

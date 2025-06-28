@@ -53,6 +53,26 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-50`}
       >
         {children}
+        <footer className="bg-gray-50 border-t border-gray-200 py-8 mt-16">
+          <div className="container mx-auto px-4">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+              <div className="text-sm text-gray-600">
+                © 2024 バドミントン大会検索. All rights reserved.
+              </div>
+              <div className="flex gap-6 text-sm">
+                <a href="/privacy" className="text-gray-600 hover:text-gray-900 transition-colors">
+                  プライバシーポリシー
+                </a>
+                <a href="/terms" className="text-gray-600 hover:text-gray-900 transition-colors">
+                  利用規約
+                </a>
+                <a href="/admin" className="text-gray-600 hover:text-gray-900 transition-colors">
+                  管理者ページ
+                </a>
+              </div>
+            </div>
+          </div>
+        </footer>
       </body>
     </html>
   );
