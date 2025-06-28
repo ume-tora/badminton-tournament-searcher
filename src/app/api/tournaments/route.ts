@@ -23,6 +23,71 @@ export async function GET(request: NextRequest) {
 
     const skip = (page - 1) * limit
 
+    // For production demo, return mock data if no database is available
+    if (process.env.NODE_ENV === 'production' && !process.env.DATABASE_URL) {
+      const mockTournaments = [
+        {
+          id: 1,
+          name: "第45回全日本バドミントン選手権大会",
+          description: "全国から強豪選手が集まる最高峰の大会です。",
+          startDate: new Date("2024-12-15"),
+          endDate: new Date("2024-12-17"),
+          prefecture: "東京都",
+          city: "渋谷区",
+          venue: "国立代々木競技場",
+          category: "一般",
+          level: "全国大会",
+          entryFee: 5000,
+          maxEntries: 256,
+          deadline: new Date("2024-11-30"),
+          contactInfo: "日本バドミントン協会",
+          sourceUrl: "https://example.com/tournament1",
+          createdAt: new Date(),
+          updatedAt: new Date()
+        },
+        {
+          id: 2,
+          name: "関東学生バドミントン選手権",
+          description: "関東地区の大学生による熱戦が繰り広げられます。",
+          startDate: new Date("2024-11-20"),
+          endDate: new Date("2024-11-22"),
+          prefecture: "神奈川県",
+          city: "横浜市",
+          venue: "横浜アリーナ",
+          category: "学生",
+          level: "地区大会",
+          entryFee: 3000,
+          maxEntries: 128,
+          deadline: new Date("2024-11-10"),
+          contactInfo: "関東学生バドミントン連盟",
+          sourceUrl: "https://example.com/tournament2",
+          createdAt: new Date(),
+          updatedAt: new Date()
+        }
+      ]
+
+      const filteredTournaments = mockTournaments.filter(tournament => {
+        if (prefecture && tournament.prefecture !== prefecture) return false
+        if (city && !tournament.city?.includes(city)) return false
+        if (category && tournament.category !== category) return false
+        if (keyword && !tournament.name.includes(keyword)) return false
+        return true
+      })
+
+      const total = filteredTournaments.length
+      const paginatedTournaments = filteredTournaments.slice(skip, skip + limit)
+
+      return NextResponse.json({
+        tournaments: paginatedTournaments,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit)
+        }
+      })
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const where: Record<string, any> = {}
 
